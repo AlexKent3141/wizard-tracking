@@ -48,14 +48,75 @@ int poll_tracking(void* data)
   }
 }
 
+enum pose
+{
+  PINCH,
+  GRAB
+};
+
+struct action
+{
+  enum pose poses[2];
+  int done[2];
+};
+
+void next_action(struct action* a)
+{
+  for (int i = 0; i < 2; i++)
+  {
+    a->poses[i] = rand() % 2;
+    a->done[i] = 0;
+  }
+}
+
+void check_action(struct action* a, LEAP_HAND h)
+{
+  int hand_index = h.type != eLeapHandType_Left;
+  switch (a->poses[hand_index])
+  {
+    case GRAB: a->done[hand_index] |= h.grab_strength > 0.6f; break;
+    case PINCH:
+    {
+      // Pinch is often a sub-pose of Grab so ensure we're not in the
+      // Grab state first.
+      if (h.grab_strength < 0.6f)
+      {
+        a->done[hand_index] |= h.pinch_strength > 0.6f;
+      }
+      break;
+    }
+  }
+}
+
 struct state
 {
   int counter;
+  struct action a;
 };
 
 void update(struct state* s)
 {
   ++s->counter;
+
+  // Check whether the current poses have been satisfied.
+  if (received_tracking)
+  {
+    assert(mtx_lock(&tracking_mtx) == thrd_success);
+
+    for (int i = 0; i < latest_tracking.num_hands; i++)
+    {
+      LEAP_HAND h = latest_tracking.hands[i];
+      check_action(&s->a, h);
+    }
+
+    assert(mtx_unlock(&tracking_mtx) == thrd_success);
+  }
+
+  // If both actions have been satisfied then generate new ones.
+  if (s->a.done[0] && s->a.done[1])
+  {
+    next_action(&s->a);
+  }
 }
 
 void get_point_loc(
@@ -127,6 +188,12 @@ void render_hand(LEAP_HAND hand)
   }
 }
 
+void render_pose(struct action a)
+{
+  if (!a.done[0]) mvprintw(max_y / 2, 2, a.poses[0] == PINCH ? "Pinch" : "Fist");
+  if (!a.done[1]) mvprintw(max_y / 2, max_x - 7, a.poses[1] == PINCH ? "Pinch" : "Fist");
+}
+
 void render(const struct state* s)
 {
   mvprintw(1, 2, "Frame: %d\n", s->counter);
@@ -146,6 +213,9 @@ void render(const struct state* s)
     assert(mtx_unlock(&tracking_mtx) == thrd_success);
   }
 
+  // Render next target pose.
+  render_pose(s->a);
+
   mvprintw(3, 2, "Size: %d %d\n", max_y, max_x);
 }
 
@@ -163,7 +233,9 @@ int main()
   thrd_t tid;
   thrd_create(&tid, &poll_tracking, NULL);
 
-  struct state s = {};
+  struct state s;
+  s.counter = 0;
+  next_action(&s.a);
   while (!quit)
   {
     int key = wgetch(stdscr);
