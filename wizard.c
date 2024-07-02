@@ -61,20 +61,52 @@ void update(struct state* s)
   s->hand_y = rand() % max_y;
 }
 
+void render_hand(LEAP_HAND hand)
+{
+  // Determine the height of the hand relative to the observer.
+  int x = hand.type == eLeapHandType_Left ? max_x / 5 : 3 * max_x / 5;
+
+  // Assuming a maximum range either side of 20cm.
+  float point_y = hand.palm.position.z;
+  float half = max_y / 2;
+
+  int y;
+  if (point_y > 0)
+  {
+    float scaled = (half - point_y) / 200.0f;
+    y = half - scaled * half;
+  }
+  else
+  {
+    float scaled = (point_y - half) / 200.0f;
+    y = half + scaled * half;
+  }
+
+  mvprintw(y, x, "%.*s", max_x / 5, "----------------------");
+}
+
 void render(const struct state* s)
 {
   mvprintw(1, 2, "Frame: %d\n", s->counter);
   box(stdscr, 0, 0);
 
-  mvwaddch(stdscr, s->hand_x, s->hand_y, '#');
+  mvwaddch(stdscr, s->hand_y, s->hand_x, '#');
 
   // Latest tracking data.
   if (received_tracking)
   {
     assert(mtx_lock(&tracking_mtx) == thrd_success);
     mvprintw(2, 2, "Tracking: %d\n", latest_tracking.num_hands);
+
+    for (int i = 0; i < latest_tracking.num_hands; i++)
+    {
+      render_hand(latest_tracking.hands[i]);
+    }
+
     assert(mtx_unlock(&tracking_mtx) == thrd_success);
   }
+
+  mvprintw(3, 2, "Size: %d %d\n", max_y, max_x);
 }
 
 int main()
@@ -84,7 +116,8 @@ int main()
   noecho();
   timeout(0);
 
-  getmaxyx(stdscr, max_x, max_y);
+  // Note: expected size is 23x91
+  getmaxyx(stdscr, max_y, max_x);
 
   // Kick off the tracking thread.
   mtx_init(&tracking_mtx, mtx_plain);
