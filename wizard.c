@@ -1,3 +1,4 @@
+#include "LeapC.h"
 #include "ncurses.h"
 #include "stdlib.h"
 
