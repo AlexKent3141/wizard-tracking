@@ -51,7 +51,6 @@ int poll_tracking(void* data)
 struct state
 {
   int counter;
-  int hand_x, hand_y;
 };
 
 void update(struct state* s)
@@ -157,7 +156,6 @@ int main()
   noecho();
   timeout(0);
 
-  // Note: expected size is 23x91
   getmaxyx(stdscr, max_y, max_x);
 
   // Kick off the tracking thread.
