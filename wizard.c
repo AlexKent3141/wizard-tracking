@@ -57,8 +57,6 @@ struct state
 void update(struct state* s)
 {
   ++s->counter;
-  s->hand_x = rand() % max_x;
-  s->hand_y = rand() % max_y;
 }
 
 void render_hand(LEAP_HAND hand)
@@ -67,6 +65,7 @@ void render_hand(LEAP_HAND hand)
   int x = hand.type == eLeapHandType_Left ? max_x / 5 : 3 * max_x / 5;
 
   // Assuming a maximum range either side of 20cm.
+  float point_x = hand.palm.position.x;
   float point_y = hand.palm.position.z;
   float half = max_y / 2;
 
@@ -83,14 +82,26 @@ void render_hand(LEAP_HAND hand)
   }
 
   mvprintw(y, x, "%.*s", max_x / 5, "----------------------");
+
+  // Draw the hand using this centre line. Going to assume a square area.
+  float mm_per_pixel = 400.0f / max_y;
+
+  // Start with getting finger tips in the right coordinate system.
+  for (int d = 0; d < 5; d++)
+  {
+    LEAP_VECTOR tip = hand.digits[d].distal.next_joint;
+    float y_diff = (point_y - tip.z) / mm_per_pixel;
+    float x_diff = (tip.x - point_x) / mm_per_pixel;
+    float tip_y = y - y_diff;
+    float tip_x = x + max_x / 10 + x_diff;
+    mvwaddch(stdscr, tip_y, tip_x, '*');
+  }
 }
 
 void render(const struct state* s)
 {
   mvprintw(1, 2, "Frame: %d\n", s->counter);
   box(stdscr, 0, 0);
-
-  mvwaddch(stdscr, s->hand_y, s->hand_x, '#');
 
   // Latest tracking data.
   if (received_tracking)
