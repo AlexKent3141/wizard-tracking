@@ -72,19 +72,19 @@ void render_hand(LEAP_HAND hand)
   int y;
   if (point_y > 0)
   {
-    float scaled = (half - point_y) / 200.0f;
+    float scaled = (half - point_y) / 100.0f;
     y = half - scaled * half;
   }
   else
   {
-    float scaled = (point_y - half) / 200.0f;
+    float scaled = (point_y - half) / 100.0f;
     y = half + scaled * half;
   }
 
   mvprintw(y, x, "%.*s", max_x / 5, "----------------------");
 
   // Draw the hand using this centre line. Going to assume a square area.
-  float mm_per_pixel = 400.0f / max_y;
+  float mm_per_pixel = 200.0f / max_y;
 
   // Start with getting finger tips in the right coordinate system.
   for (int d = 0; d < 5; d++)
