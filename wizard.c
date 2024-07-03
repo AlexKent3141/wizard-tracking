@@ -1,10 +1,16 @@
-#include "assert.h"
 #include "LeapC.h"
 #include "ncurses.h"
+
+#include "assert.h"
+#include "math.h"
 #include "stdatomic.h"
 #include "stdlib.h"
 #include "string.h"
 #include "threads.h"
+
+#define PI 3.14159
+#define DOT(a, b) (a.x * b.x + a.y * b.y + a.z * b.z)
+#define VEC(a, b) { a.x - b.x, a.y - b.y, a.z - b.z }
 
 int max_x, max_y;
 atomic_int quit = 0;
@@ -51,7 +57,8 @@ int poll_tracking(void* data)
 enum pose
 {
   PINCH,
-  GRAB
+  GRAB,
+  PALM
 };
 
 struct action
@@ -64,9 +71,44 @@ void next_action(struct action* a)
 {
   for (int i = 0; i < 2; i++)
   {
-    a->poses[i] = rand() % 2;
+    a->poses[i] = rand() % 3;
     a->done[i] = 0;
   }
+}
+
+int is_grab(LEAP_HAND h)
+{
+  return h.grab_strength > 0.6f;
+}
+
+int is_pinch(LEAP_HAND h)
+{
+  return h.pinch_strength > 0.6f;
+}
+
+float angle_between(LEAP_VECTOR v1, LEAP_VECTOR v2)
+{
+  return acos(DOT(v1, v2) / (sqrt(DOT(v1, v1)) * sqrt(DOT(v2, v2))));
+}
+
+int is_palm(LEAP_HAND h)
+{
+  // Check that each finger is roughly straight.
+  // Done by checking the angle between the bones of each digit.
+  // Skipping the thumb.
+  int palm_like = 1;
+  for (int d = 1; d < 5 && palm_like; d++)
+  {
+    const LEAP_BONE b1 = h.digits[d].bones[1];
+    const LEAP_BONE b2 = h.digits[d].bones[2];
+
+    const LEAP_VECTOR v1 = VEC(b1.next_joint, b1.prev_joint);
+    const LEAP_VECTOR v2 = VEC(b2.next_joint, b2.prev_joint);
+
+    palm_like &= angle_between(v1, v2) < PI / 12;
+  }
+
+  return palm_like;
 }
 
 void check_action(struct action* a, LEAP_HAND h)
@@ -74,17 +116,18 @@ void check_action(struct action* a, LEAP_HAND h)
   int hand_index = h.type != eLeapHandType_Left;
   switch (a->poses[hand_index])
   {
-    case GRAB: a->done[hand_index] |= h.grab_strength > 0.6f; break;
+    case GRAB: a->done[hand_index] |= is_grab(h); break;
     case PINCH:
     {
       // Pinch is often a sub-pose of Grab so ensure we're not in the
       // Grab state first.
-      if (h.grab_strength < 0.6f)
+      if (!is_grab(h))
       {
-        a->done[hand_index] |= h.pinch_strength > 0.6f;
+        a->done[hand_index] |= is_pinch(h);
       }
       break;
     }
+    case PALM: a->done[hand_index] |= is_palm(h); break;
   }
 }
 
@@ -137,7 +180,7 @@ void get_point_loc(
 void render_hand(LEAP_HAND hand)
 {
   // The scale represents the vertical height that we are rendering in mm.
-  float scale = 300.0f;
+  const float scale = 300.0f;
 
   // Determine the x coordinate of the left side of the hand.
   // To accommodate the UI the hands will be fixed to columns within the view.
@@ -182,10 +225,15 @@ void render_hand(LEAP_HAND hand)
   }
 }
 
+const char* pose_str(enum pose p)
+{
+  return p == PINCH ? "Pinch" : p == GRAB ? "Fist" : "Palm";
+}
+
 void render_pose(struct action a)
 {
-  if (!a.done[0]) mvprintw(max_y / 2, 2, a.poses[0] == PINCH ? "Pinch" : "Fist");
-  if (!a.done[1]) mvprintw(max_y / 2, max_x - 7, a.poses[1] == PINCH ? "Pinch" : "Fist");
+  if (!a.done[0]) mvprintw(max_y / 2, 2, pose_str(a.poses[0]));
+  if (!a.done[1]) mvprintw(max_y / 2, max_x - 7, pose_str(a.poses[1]));
 }
 
 void render(const struct state* s)

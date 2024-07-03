@@ -14,4 +14,5 @@ set_target_properties(wiz
 
 target_link_libraries(wiz
   ${CURSES_LIBRARIES}
-  LeapSDK::LeapC)
+  LeapSDK::LeapC
+  m)
