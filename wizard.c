@@ -11,6 +11,9 @@
 #define PI 3.14159
 #define DOT(a, b) (a.x * b.x + a.y * b.y + a.z * b.z)
 #define VEC(a, b) { a.x - b.x, a.y - b.y, a.z - b.z }
+#define MIN(a, b) (a < b ? a : b)
+#define MAX(a, b) (a > b ? a : b)
+#define SGN(a) (a > 0 ? 1 : -1)
 
 int max_x, max_y;
 atomic_int quit = 0;
@@ -88,7 +91,9 @@ int is_pinch(LEAP_HAND h)
 
 float angle_between(LEAP_VECTOR v1, LEAP_VECTOR v2)
 {
-  return acos(DOT(v1, v2) / (sqrt(DOT(v1, v1)) * sqrt(DOT(v2, v2))));
+  float angle = acos(DOT(v1, v2) / (sqrt(DOT(v1, v1)) * sqrt(DOT(v2, v2))));
+  if (SGN(v1.y) != SGN(v2.y)) angle *= -1;
+  return angle;
 }
 
 int is_palm(LEAP_HAND h)
@@ -168,13 +173,51 @@ void get_point_loc(
   float dx,
   float dy,
   float scale,
-  float* tx,
-  float* ty)
+  int* tx,
+  int* ty)
 {
   float y_diff = dy / scale;
   float x_diff = dx / scale;
   *tx = base_x + max_x / 10 + x_diff;
   *ty = base_y - y_diff;
+}
+
+void render_bone(int x_start, int x_end, int y_start, int y_end)
+{
+  float num_steps = MAX(abs(x_end - x_start), abs(y_end - y_start));
+  if (num_steps != 0)
+  {
+    float x_diff_per_step = (x_end - x_start) / num_steps;
+    float y_diff_per_step = (y_end - y_start) / num_steps;
+
+    // Pick the symbol based on the step ratio.
+    char c = '|';
+    if (x_diff_per_step != 0)
+    {
+      LEAP_VECTOR x_axis = {1, 0, 0};
+      LEAP_VECTOR dir = {x_diff_per_step, y_diff_per_step, 0};
+
+      float angle = angle_between(x_axis, dir);
+
+      const float tol = PI / 8;
+
+      if (fabs(angle - (PI / 4)) < tol || fabs(angle + (3 * PI / 4)) < tol)
+        c = '/';
+      else if (fabs(angle + (PI / 4)) < tol || fabs(angle - (3 * PI / 4)) < tol)
+        c = '\\';
+      else if (fabs(angle) < tol || fabs(angle - PI) < tol)
+        c = '-';
+    }
+
+    float x_cur = x_start + x_diff_per_step;
+    float y_cur = y_start + y_diff_per_step;
+    while (fabs(x_cur - (float)x_end) >= 0.5 || fabs(y_cur - (float)y_end) >= 0.5)
+    {
+      mvwaddch(stdscr, y_cur, x_cur, c);
+      x_cur += x_diff_per_step;
+      y_cur += y_diff_per_step;
+    }
+  }
 }
 
 void render_hand(LEAP_HAND hand)
@@ -202,26 +245,36 @@ void render_hand(LEAP_HAND hand)
   for (int d = 0; d < 5; d++)
   {
     LEAP_VECTOR tip = hand.digits[d].distal.next_joint;
-    float tip_x, tip_y;
+    int tip_x, tip_y;
     get_point_loc(x, y, tip.x - cx, cy - tip.z, mm_per_pixel, &tip_x, &tip_y);
     mvwaddch(stdscr, tip_y, tip_x, '*');
 
-    // Capture the positions of the bones.
+    // Capture the ends of the bones.
     LEAP_VECTOR joint = hand.digits[d].distal.prev_joint;
-    float joint_x, joint_y;
+    int distal_prev_x, distal_prev_y;
     get_point_loc(
-      x, y, joint.x - cx, cy - joint.z, mm_per_pixel, &joint_x, &joint_y);
-    mvwaddch(stdscr, joint_y, joint_x, '^');
+      x, y, joint.x - cx, cy - joint.z, mm_per_pixel, &distal_prev_x, &distal_prev_y);
+    mvwaddch(stdscr, distal_prev_y, distal_prev_x, '^');
 
+    int intermediate_prev_x, intermediate_prev_y;
     joint = hand.digits[d].intermediate.prev_joint;
     get_point_loc(
-      x, y, joint.x - cx, cy - joint.z, mm_per_pixel, &joint_x, &joint_y);
-    mvwaddch(stdscr, joint_y, joint_x, 'x');
+      x, y, joint.x - cx, cy - joint.z, mm_per_pixel, &intermediate_prev_x, &intermediate_prev_y);
+    mvwaddch(stdscr, intermediate_prev_y, intermediate_prev_x, 'x');
 
+    int proximal_prev_x, proximal_prev_y;
     joint = hand.digits[d].proximal.prev_joint;
     get_point_loc(
-      x, y, joint.x - cx, cy - joint.z, mm_per_pixel, &joint_x, &joint_y);
-    mvwaddch(stdscr, joint_y, joint_x, '#');
+      x, y, joint.x - cx, cy - joint.z, mm_per_pixel, &proximal_prev_x, &proximal_prev_y);
+    mvwaddch(stdscr, proximal_prev_y, proximal_prev_x, '#');
+
+    // Draw the bone themselves.
+    render_bone(
+      proximal_prev_x, intermediate_prev_x, proximal_prev_y, intermediate_prev_y);
+    render_bone(
+      intermediate_prev_x, distal_prev_x, intermediate_prev_y, distal_prev_y);
+    render_bone(
+      distal_prev_x, tip_x, distal_prev_y, tip_y);
   }
 }
 
