@@ -136,54 +136,48 @@ void get_point_loc(
 
 void render_hand(LEAP_HAND hand)
 {
-  float scale = 150.0f;
+  // The scale represents the vertical height that we are rendering in mm.
+  float scale = 300.0f;
 
-  // Determine the height of the hand relative to the observer.
+  // Determine the x coordinate of the left side of the hand.
+  // To accommodate the UI the hands will be fixed to columns within the view.
   int x = hand.type == eLeapHandType_Left ? max_x / 5 : 3 * max_x / 5;
 
-  // Assuming a maximum range either side of 20cm.
-  float point_x = hand.palm.position.x;
-  float point_y = hand.palm.position.z;
+  // Determine the y location we want the centre of the palm to be placed at.
+  float cx = hand.palm.position.x;
+  float cy = hand.palm.position.z;
   float half = max_y / 2;
 
-  int y;
-  if (point_y > 0)
-  {
-    float scaled = (half - point_y) / scale;
-    y = half - scaled * half;
-  }
-  else
-  {
-    float scaled = (point_y - half) / scale;
-    y = half + scaled * half;
-  }
+  int y = cy > 0
+    ? half - 2 * half * (half - cy) / scale
+    : half + 2 * half * (cy - half) / scale;
 
   // Draw the hand using this centre line. Going to assume a square area.
-  float mm_per_pixel = 2 * scale / max_y;
+  float mm_per_pixel = scale / max_y;
 
   // Start with getting finger tips in the right coordinate system.
   for (int d = 0; d < 5; d++)
   {
     LEAP_VECTOR tip = hand.digits[d].distal.next_joint;
     float tip_x, tip_y;
-    get_point_loc(x, y, tip.x - point_x, point_y - tip.z, mm_per_pixel, &tip_x, &tip_y);
+    get_point_loc(x, y, tip.x - cx, cy - tip.z, mm_per_pixel, &tip_x, &tip_y);
     mvwaddch(stdscr, tip_y, tip_x, '*');
 
     // Capture the positions of the bones.
     LEAP_VECTOR joint = hand.digits[d].distal.prev_joint;
     float joint_x, joint_y;
     get_point_loc(
-      x, y, joint.x - point_x, point_y - joint.z, mm_per_pixel, &joint_x, &joint_y);
+      x, y, joint.x - cx, cy - joint.z, mm_per_pixel, &joint_x, &joint_y);
     mvwaddch(stdscr, joint_y, joint_x, '^');
 
     joint = hand.digits[d].intermediate.prev_joint;
     get_point_loc(
-      x, y, joint.x - point_x, point_y - joint.z, mm_per_pixel, &joint_x, &joint_y);
+      x, y, joint.x - cx, cy - joint.z, mm_per_pixel, &joint_x, &joint_y);
     mvwaddch(stdscr, joint_y, joint_x, 'x');
 
     joint = hand.digits[d].proximal.prev_joint;
     get_point_loc(
-      x, y, joint.x - point_x, point_y - joint.z, mm_per_pixel, &joint_x, &joint_y);
+      x, y, joint.x - cx, cy - joint.z, mm_per_pixel, &joint_x, &joint_y);
     mvwaddch(stdscr, joint_y, joint_x, '#');
   }
 }
