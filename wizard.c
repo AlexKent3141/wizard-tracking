@@ -7,7 +7,9 @@
 #include "stdlib.h"
 #include "string.h"
 #include "threads.h"
-#include "time.h"
+
+// The scale represents the vertical height that we are rendering in mm.
+#define SCALE 300.0f
 
 #define PI 3.14159
 #define DOT(a, b) (a.x * b.x + a.y * b.y + a.z * b.z)
@@ -15,6 +17,21 @@
 #define MIN(a, b) (a < b ? a : b)
 #define MAX(a, b) (a > b ? a : b)
 #define SGN(a) (a > 0 ? 1 : -1)
+
+#define CLOAK_FABRIC_PAIR 1
+#define CLOAK_FOLD_PAIR 2
+
+uint32_t seed = 0xDEADBEEF;
+uint32_t latest_cloak_seed[2];
+int latest_cloak_y[2];
+
+uint32_t xorshift(uint32_t x)
+{
+  x ^= x << 13;
+  x ^= x >> 17;
+  x ^= x << 5;
+  return x;
+}
 
 int max_x, max_y;
 atomic_int quit = 0;
@@ -75,7 +92,7 @@ void next_action(struct action* a)
 {
   for (int i = 0; i < 2; i++)
   {
-    a->poses[i] = rand() % 3;
+    a->poses[i] = (seed = xorshift(seed)) % 3;
     a->done[i] = 0;
   }
 }
@@ -221,11 +238,35 @@ void render_bone(int x_start, int x_end, int y_start, int y_end)
   }
 }
 
+void render_cloak(int x_left, int y_start, uint32_t s)
+{
+  // From palm centre down draw the cloak.
+  // Getting some nice results by following the cloak downwards in continuous strands.
+
+  // Unless the seed changes this function will always draw the same cloak.
+  for (int line = 0; line < 100; line++)
+  {
+    int is_fold = line % 5 == 0;
+    int x = x_left + 3 * (max_x / 40) + (((s = xorshift(s)) % 100) / 100.0f) * (max_x / 20);
+    attron(COLOR_PAIR(is_fold ? CLOAK_FOLD_PAIR : CLOAK_FABRIC_PAIR));
+    for (int y = y_start; y < y_start + max_y / 2; y++)
+    {
+      // Pick a move direction.
+      static char cloak_chars[] = { '\\', '/', '|' };
+      static int x_offsets[] = { 1, -1, 0 };
+      int dir = (s = xorshift(s)) % 3;
+
+      mvwaddch(stdscr, y, x, cloak_chars[dir]);
+
+      x += x_offsets[dir];
+    }
+
+    attroff(COLOR_PAIR(is_fold ? CLOAK_FOLD_PAIR : CLOAK_FABRIC_PAIR));
+  }
+}
+
 void render_hand(LEAP_HAND hand)
 {
-  // The scale represents the vertical height that we are rendering in mm.
-  const float scale = 300.0f;
-
   // Determine the x coordinate of the left side of the hand.
   // To accommodate the UI the hands will be fixed to columns within the view.
   int x = hand.type == eLeapHandType_Left ? max_x / 5 : 3 * max_x / 5;
@@ -236,13 +277,14 @@ void render_hand(LEAP_HAND hand)
   float half = max_y / 2;
 
   int y = cy > 0
-    ? half - 2 * half * (half - cy) / scale
-    : half + 2 * half * (cy - half) / scale;
+    ? half - 2 * half * (half - cy) / SCALE
+    : half + 2 * half * (cy - half) / SCALE;
 
   // Draw the hand using this centre line. Going to assume a square area.
-  float mm_per_pixel = scale / max_y;
+  float mm_per_pixel = SCALE / max_y;
 
   // Start with getting finger tips in the right coordinate system.
+  attron(A_BOLD);
   for (int d = 0; d < 5; d++)
   {
     LEAP_VECTOR tip = hand.digits[d].distal.next_joint;
@@ -277,6 +319,18 @@ void render_hand(LEAP_HAND hand)
     render_bone(
       distal_prev_x, tip_x, distal_prev_y, tip_y);
   }
+
+  attroff(A_BOLD);
+
+  // If the hand has moved far enough then update the cloak seed.
+  int chirality= hand.type == eLeapHandType_Left;
+  if (abs(y - latest_cloak_y[chirality]) > 1)
+  {
+    latest_cloak_seed[chirality] = seed = xorshift(seed);
+    latest_cloak_y[chirality] = y;
+  }
+
+  render_cloak(x, y, latest_cloak_seed[chirality]);
 }
 
 const char* pose_str(enum pose p)
@@ -317,12 +371,22 @@ void render(const struct state* s)
 
 int main()
 {
-  srand(time(NULL));
-
   initscr();
   cbreak();
   noecho();
   timeout(0);
+
+  // Initialise colours.
+  if (has_colors() == FALSE)
+  {
+    endwin();
+    puts("Your terminal does not support colour");
+    return EXIT_FAILURE;
+  }
+
+  start_color();
+  init_pair(CLOAK_FABRIC_PAIR, COLOR_BLUE, COLOR_BLACK);
+  init_pair(CLOAK_FOLD_PAIR, COLOR_GREEN, COLOR_BLACK);
 
   getmaxyx(stdscr, max_y, max_x);
 
