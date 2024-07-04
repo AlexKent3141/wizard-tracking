@@ -249,7 +249,7 @@ void render_cloak(int x_left, int y_start, uint32_t s)
   for (int line = 0; line < 100; line++)
   {
     int is_fold = line % 5 == 0;
-    int x = x_left + 3 * (max_x / 40) + (((s = xorshift(s)) % 100) / 100.0f) * (max_x / 20);
+    int x = x_left + (max_x / 20) + (((s = xorshift(s)) % 100) / 100.0f) * (max_x / 10);
     attron(COLOR_PAIR(is_fold ? CLOAK_FOLD_PAIR : CLOAK_FABRIC_PAIR));
     for (int y = y_start; y < y_start + max_y / 2; y++)
     {
