@@ -17,9 +17,11 @@
 #define MIN(a, b) (a < b ? a : b)
 #define MAX(a, b) (a > b ? a : b)
 #define SGN(a) (a > 0 ? 1 : -1)
+#define WRAP(y, x) s->life[y < 0 ? y + max_y : y >= max_y ? y - max_y : y][x < 0 ? x + max_x : x >= max_x ? x - max_x : x]
 
 #define CLOAK_FABRIC_PAIR 1
 #define CLOAK_FOLD_PAIR 2
+#define LIFE_PAIR 3
 
 uint32_t seed = 0xDEADBEEF;
 uint32_t latest_cloak_seed[2];
@@ -158,13 +160,15 @@ void check_action(struct action* a, LEAP_HAND h)
 
 struct state
 {
-  int counter;
+  int frame_counter;
+  int spell_counter;
   struct action a;
+  int** life;
 };
 
 void update(struct state* s)
 {
-  ++s->counter;
+  ++s->frame_counter;
 
   // Check whether the current poses have been satisfied.
   if (received_tracking)
@@ -184,6 +188,60 @@ void update(struct state* s)
   if (s->a.done[0] && s->a.done[1])
   {
     next_action(&s->a);
+
+    ++s->spell_counter;
+
+    if (s->spell_counter == 2)
+    {
+      // Create life.
+      int side = max_y / 4;
+      int start_y = (seed = xorshift(seed)) % (max_y - side);
+      int start_x = (seed = xorshift(seed)) % (max_x - side);
+      for (int y = 0; y < side; y++)
+      {
+        for (int x = 0; x < side; x++)
+        {
+          s->life[start_y + y][start_x + x] = (seed = xorshift(seed)) % 2;
+        }
+      }
+
+      s->spell_counter = 0;
+    }
+  }
+
+  // Update the GoL.
+  if (s->frame_counter % 3 == 0)
+  {
+    static int** next_life = NULL;
+    if (!next_life)
+    {
+      next_life = malloc(max_y * sizeof(int*));
+      for (int y = 0; y < max_y; y++)
+      {
+        next_life[y] = malloc(max_x * sizeof(int));
+      }
+    }
+
+    for (int y = 0; y < max_y; y++)
+    {
+      for (int x = 0; x < max_x; x++)
+      {
+        int alive_count =
+          WRAP(y - 1, x - 1) + WRAP(y - 1, x) + WRAP(y - 1, x + 1) +
+          WRAP(y, x - 1)                      + WRAP(y, x + 1) +
+          WRAP(y + 1, x - 1) + WRAP(y + 1, x) + WRAP(y + 1, x + 1);
+
+        // These rules generally die out so we get a brief "explosion".
+        next_life[y][x] = s->life[y][x]
+          ? alive_count > 2 && alive_count < 4
+          : alive_count == 3;
+      }
+    }
+
+    // Swap the buffers.
+    int** temp = s->life;
+    s->life = next_life;
+    next_life = temp;
   }
 }
 
@@ -351,8 +409,23 @@ void render_pose(struct action a)
 
 void render(const struct state* s)
 {
-  mvprintw(1, 2, "Frame: %d\n", s->counter);
+  mvprintw(1, 2, "Frame: %d\n", s->frame_counter);
   box(stdscr, 0, 0);
+
+  // Render GoL state.
+  attron(COLOR_PAIR(LIFE_PAIR));
+  for (int y = 0; y < max_y; y++)
+  {
+    for (int x = 0; x < max_x; x++)
+    {
+      if (s->life[y][x])
+      {
+        mvwaddch(stdscr, y, x, '#');
+      }
+    }
+  }
+
+  attroff(COLOR_PAIR(LIFE_PAIR));
 
   // Latest tracking data.
   if (received_tracking)
@@ -392,6 +465,7 @@ int main()
   start_color();
   init_pair(CLOAK_FABRIC_PAIR, COLOR_BLUE, COLOR_BLACK);
   init_pair(CLOAK_FOLD_PAIR, COLOR_GREEN, COLOR_BLACK);
+  init_pair(LIFE_PAIR, COLOR_RED, COLOR_RED);
 
   getmaxyx(stdscr, max_y, max_x);
 
@@ -401,8 +475,18 @@ int main()
   thrd_create(&tid, &poll_tracking, NULL);
 
   struct state s;
-  s.counter = 0;
+  s.frame_counter = 0;
+  s.spell_counter = 0;
   next_action(&s.a);
+
+  // Allocate GoL arrays.
+  s.life = malloc(max_y * sizeof(int*));
+  for (int y = 0; y < max_y; y++)
+  {
+    s.life[y] = malloc(max_x * sizeof(int));
+    memset(s.life[y], 0, max_x * sizeof(int));
+  }
+
   while (!quit)
   {
     int key = wgetch(stdscr);
