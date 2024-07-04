@@ -251,7 +251,7 @@ void render_cloak(int x_left, int y_start, uint32_t s)
     int is_fold = line % 5 == 0;
     int x = x_left + (max_x / 20) + (((s = xorshift(s)) % 100) / 100.0f) * (max_x / 10);
     attron(COLOR_PAIR(is_fold ? CLOAK_FOLD_PAIR : CLOAK_FABRIC_PAIR));
-    for (int y = y_start; y < y_start + max_y / 2; y++)
+    for (int y = y_start; y < y_start + max_y / 3; y++)
     {
       // Pick a move direction.
       static char cloak_chars[] = { '\\', '/', '|' };
@@ -342,8 +342,11 @@ const char* pose_str(enum pose p)
 
 void render_pose(struct action a)
 {
-  if (!a.done[0]) mvprintw(max_y / 2, 2, "%s", pose_str(a.poses[0]));
-  if (!a.done[1]) mvprintw(max_y / 2, max_x - 7, "%s", pose_str(a.poses[1]));
+  const char* s = pose_str(a.poses[0]);
+  if (!a.done[0]) mvprintw(5, 3 * max_x / 10 - strlen(s) / 2, "%s", s);
+
+  s = pose_str(a.poses[1]);
+  if (!a.done[1]) mvprintw(5, 7 * max_x / 10 - strlen(s), "%s", s);
 }
 
 void render(const struct state* s)
