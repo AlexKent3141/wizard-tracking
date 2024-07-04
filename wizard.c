@@ -7,6 +7,7 @@
 #include "stdlib.h"
 #include "string.h"
 #include "threads.h"
+#include "time.h"
 
 #define PI 3.14159
 #define DOT(a, b) (a.x * b.x + a.y * b.y + a.z * b.z)
@@ -316,6 +317,8 @@ void render(const struct state* s)
 
 int main()
 {
+  srand(time(NULL));
+
   initscr();
   cbreak();
   noecho();
