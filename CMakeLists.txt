@@ -16,3 +16,9 @@ target_link_libraries(wiz
   ${CURSES_LIBRARIES}
   LeapSDK::LeapC
   m)
+
+target_compile_options(wiz
+  PRIVATE
+    -Werror
+    -Wall
+    -Wpedantic)

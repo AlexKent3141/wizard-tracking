@@ -13,7 +13,7 @@
 
 #define PI 3.14159
 #define DOT(a, b) (a.x * b.x + a.y * b.y + a.z * b.z)
-#define VEC(a, b) { a.x - b.x, a.y - b.y, a.z - b.z }
+#define VEC(a, b) { .x=a.x - b.x, .y=a.y - b.y, .z=a.z - b.z }
 #define MIN(a, b) (a < b ? a : b)
 #define MAX(a, b) (a > b ? a : b)
 #define SGN(a) (a > 0 ? 1 : -1)
@@ -73,6 +73,8 @@ int poll_tracking(void* data)
       received_tracking = 1;
     }
   }
+
+  return 0;
 }
 
 enum pose
@@ -212,8 +214,8 @@ void render_bone(int x_start, int x_end, int y_start, int y_end)
     char c = '|';
     if (x_diff_per_step != 0)
     {
-      LEAP_VECTOR x_axis = {1, 0, 0};
-      LEAP_VECTOR dir = {x_diff_per_step, y_diff_per_step, 0};
+      LEAP_VECTOR x_axis = {.x=1, .y=0, .z=0};
+      LEAP_VECTOR dir = {.x=x_diff_per_step, .y=y_diff_per_step, .z=0};
 
       float angle = angle_between(x_axis, dir);
 
@@ -340,8 +342,8 @@ const char* pose_str(enum pose p)
 
 void render_pose(struct action a)
 {
-  if (!a.done[0]) mvprintw(max_y / 2, 2, pose_str(a.poses[0]));
-  if (!a.done[1]) mvprintw(max_y / 2, max_x - 7, pose_str(a.poses[1]));
+  if (!a.done[0]) mvprintw(max_y / 2, 2, "%s", pose_str(a.poses[0]));
+  if (!a.done[1]) mvprintw(max_y / 2, max_x - 7, "%s", pose_str(a.poses[1]));
 }
 
 void render(const struct state* s)
