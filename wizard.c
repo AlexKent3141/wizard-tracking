@@ -22,6 +22,7 @@
 #define CLOAK_FABRIC_PAIR 1
 #define CLOAK_FOLD_PAIR 2
 #define LIFE_PAIR 3
+#define HAND_PAIR 4
 
 uint32_t seed = 0xDEADBEEF;
 uint32_t latest_cloak_seed[2];
@@ -344,6 +345,7 @@ void render_hand(LEAP_HAND hand)
   float mm_per_pixel = SCALE / max_y;
 
   // Start with getting finger tips in the right coordinate system.
+  attron(COLOR_PAIR(HAND_PAIR));
   attron(A_BOLD);
   for (int d = 0; d < 5; d++)
   {
@@ -381,6 +383,7 @@ void render_hand(LEAP_HAND hand)
   }
 
   attroff(A_BOLD);
+  attroff(COLOR_PAIR(HAND_PAIR));
 
   // If the hand has moved far enough then update the cloak seed.
   int chirality= hand.type == eLeapHandType_Left;
@@ -466,6 +469,7 @@ int main()
   init_pair(CLOAK_FABRIC_PAIR, COLOR_BLUE, COLOR_BLACK);
   init_pair(CLOAK_FOLD_PAIR, COLOR_GREEN, COLOR_BLACK);
   init_pair(LIFE_PAIR, COLOR_RED, COLOR_RED);
+  init_pair(HAND_PAIR, COLOR_BLUE, COLOR_WHITE);
 
   getmaxyx(stdscr, max_y, max_x);
 
